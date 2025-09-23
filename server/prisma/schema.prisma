@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  FACULTY
+  STUDENT
+  ACCOUNTANT
+  LIBRARIAN
+  WARDEN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AdmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WAITLISTED
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  firstName   String
+  lastName    String
+  role        UserRole
+  isActive    Boolean  @default(true)
+  profileImage String?
+  phone       String?
+  address     String?  @db.Text
+  dateOfBirth DateTime?
+  gender      Gender?
+  
+  // Role-specific fields
+  department  String?
+  studentId   String?  @unique
+  employeeId  String?  @unique
+  
+  // Authentication related
+  resetToken  String? @db.Text
+  resetTokenExpiry DateTime?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  attendanceSessions AttendanceSession[]
+  attendanceRecords  AttendanceRecord[]
+  notices           Notice[]
+  sentNotices       NoticeRecipient[]
+  auditLogs         AuditLog[]
+  
+  // Student specific relations
+  fees              Fee[]
+  bookIssues        BookIssue[]
+  hostelAllocation  HostelAllocation?
+  
+  // Admissions reviewed by this user (admin/faculty)
+  admissionsReviewed Admission[]
+
+  // Payment & adjustment relations (added)
+  paymentTransactions PaymentTransaction[] @relation(name: "PaymentTransaction_student")
+  feeAdjustmentsReceived FeeAdjustment[]    @relation(name: "FeeAdjustment_student")
+  feeAdjustmentsApplied  FeeAdjustment[]    @relation(name: "FeeAdjustment_appliedBy")
+  
+  @@map("users")
+}
+
+model Notice {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @db.Text
+  priority    String   @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  targetAudience String @default("ALL") // ALL, STUDENTS, FACULTY, DEPARTMENT, YEAR
+  targetValue String?  // Department name, year, etc.
+  attachments String?  @db.Text // JSON array of file URLs
+  isPublished Boolean  @default(false)
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  
+  // Relations
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  recipients  NoticeRecipient[]
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("notices")
+}
+
+model NoticeRecipient {
+  id       String @id @default(cuid())
+  noticeId String
+  userId   String
+  readAt   DateTime?
+  
+  notice   Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([noticeId, userId])
+  @@map("notice_recipients")
+}
+
+model AttendanceSession {
+  id          String   @id @default(cuid())
+  subject     String
+  className   String
+  sessionDate DateTime @default(now())
+  startTime   DateTime
+  endTime     DateTime?
+  qrCode      String?  @unique
+  isActive    Boolean  @default(true)
+  location    String?
+  
+  // Relations
+  facultyId   String
+  faculty     User     @relation(fields: [facultyId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id        String   @id @default(cuid())
+  sessionId String
+  studentId String
+  markedAt  DateTime @default(now())
+  isPresent Boolean  @default(true)
+  ipAddress String?
+  userAgent String?
+  
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   User              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  @@unique([sessionId, studentId])
+  @@map("attendance_records")
+}
+
+model Fee {
+  id            String   @id @default(cuid())
+  studentId     String
+  feeType       String   // TUITION, HOSTEL, EXAM, LIBRARY, etc.
+  amount        Float
+  dueDate       DateTime
+  paidAmount    Float    @default(0)
+  paidAt        DateTime?
+  status        String   @default("PENDING") // PENDING, PAID, OVERDUE
+  academicYear  String
+  semester      String?
+  description   String?
+  
+  student       User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  // payments relation (added)
+  paymentTransactions PaymentTransaction[] @relation(name: "PaymentTransaction_fee")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("fees")
+}
+
+model Book {
+  id          String   @id @default(cuid())
+  title       String
+  author      String
+  isbn        String?  @unique
+  category    String
+  totalCopies Int
+  availableCopies Int
+  publisher   String?
+  publishedYear Int?
+  location    String?  // Shelf location
+  
+  issues      BookIssue[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("books")
+}
+
+model BookIssue {
+  id          String    @id @default(cuid())
+  bookId      String
+  studentId   String
+  issueDate   DateTime  @default(now())
+  dueDate     DateTime
+  returnDate  DateTime?
+  fine        Float     @default(0)
+  status      String    @default("ISSUED") // ISSUED, RETURNED, OVERDUE
+  
+  book        Book      @relation(fields: [bookId], references: [id])
+  student     User      @relation(fields: [studentId], references: [id])
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("book_issues")
+}
+
+model HostelBlock {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  type      String   // BOYS, GIRLS, MIXED
+  totalRooms Int
+  warden    String?
+  
+  rooms     HostelRoom[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("hostel_blocks")
+}
+
+model HostelRoom {
+  id          String   @id @default(cuid())
+  blockId     String
+  roomNumber  String
+  capacity    Int
+  occupied    Int      @default(0)
+  roomType    String   // SINGLE, DOUBLE, TRIPLE, QUAD
+  facilities  String?  @db.Text // JSON array
+  
+  block       HostelBlock @relation(fields: [blockId], references: [id])
+  allocations HostelAllocation[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([blockId, roomNumber])
+  @@map("hostel_rooms")
+}
+
+model HostelAllocation {
+  id        String   @id @default(cuid())
+  studentId String   @unique
+  roomId    String
+  bedNumber Int?
+  allocatedAt DateTime @default(now())
+  vacatedAt DateTime?
+  status    String   @default("ACTIVE") // ACTIVE, VACATED, TRANSFERRED
+  
+  student   User       @relation(fields: [studentId], references: [id])
+  room      HostelRoom @relation(fields: [roomId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("hostel_allocations")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
+  resource  String   // User, Notice, Attendance, etc.
+  resourceId String?
+  oldValues String?  @db.Text // JSON
+  newValues String?  @db.Text // JSON
+  ipAddress String?
+  userAgent String?
+  
+  // relation optional so we can log actions that happen before authentication
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  createdAt DateTime @default(now())
+  
+  @@map("audit_logs")
+}
+
+model Admission {
+  id            String         @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String
+  phone         String?
+  dateOfBirth   DateTime?
+  department    String?
+  applicationData String?      @db.Text  // JSON blob for extra fields
+  documents     String?        @db.Text  // JSON array of file URLs (if uploaded)
+  status        AdmissionStatus @default(PENDING)
+  appliedAt     DateTime       @default(now())
+
+  // Review fields
+  reviewedById  String?
+  reviewedBy    User?          @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  reviewNotes   String?        @db.Text
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("admissions")
+}
+
+// New models for Reports & Fee Management
+model FeeStructure {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  amount      Float
+  currency    String   @default("INR")
+  academicYear String?
+  course      String?  // program/course name
+  year        String?  // year/semester label
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("fee_structures")
+}
+
+model PaymentTransaction {
+  id            String   @id @default(cuid())
+  studentId     String
+  feeId         String?   // optional link to Fee or FeeStructure
+  amount        Float
+  method        String    // CASH, CHEQUE, UPI, CARD, ONLINE
+  status        String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  reference     String?   // txn reference
+  transactionAt DateTime  @default(now())
+
+  // Named relations with matching names on the opposite models
+  student       User      @relation(name: "PaymentTransaction_student", fields: [studentId], references: [id], onDelete: Cascade)
+  fee           Fee?      @relation(name: "PaymentTransaction_fee", fields: [feeId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("payment_transactions")
+}
+
+model FeeAdjustment {
+  id          String   @id @default(cuid())
+  studentId   String
+  amount      Float    // negative for waiver/discount, positive for charge
+  type        String   // WAIVER, SCHOLARSHIP, PENALTY, MANUAL_ADJUST
+  reason      String?  @db.Text
+  appliedById String?  // admin/accountant/user who applied
+  appliedAt   DateTime @default(now())
+
+  // Named relations to avoid ambiguity
+  student     User     @relation(name: "FeeAdjustment_student", fields: [studentId], references: [id], onDelete: Cascade)
+  appliedBy   User?    @relation(name: "FeeAdjustment_appliedBy", fields: [appliedById], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("fee_adjustments")
+}
