@@ -25,6 +25,15 @@ import Examinations from './pages/dashboard/Examinations';
 import HostelManagement from './pages/dashboard/HostelManagement';
 import TeacherQRAttendance from './pages/dashboard/TeacherQRAttendance';
 import StudentQRAttendance from './pages/dashboard/StudentQRAttendance';
+import Academics from './pages/dashboard/Academics';
+import FacultyStudentProgress from './pages/dashboard/FacultyStudentProgress';
+import BookManagement from './pages/dashboard/BookManagement';
+import StudentRecords from './pages/dashboard/StudentRecords';
+import DigitalLibrary from './pages/dashboard/DigitalLibrary';
+import Scholarships from './pages/dashboard/Scholarships';
+import StudentLibrary from './pages/dashboard/StudentLibrary';
+import StudentHostel from './pages/dashboard/StudentHostel';
+import Placement from './pages/dashboard/Placement'; // <-- add import
 
 function App() {
   return (
@@ -48,15 +57,23 @@ function App() {
               }>
                 <Route index element={<Navigate to="/dashboard/home" replace />} />
                 <Route path="home" element={<DashboardRouter />} />
+                <Route path="academics" element={<Academics />} />
                 <Route path="users" element={<UsersManagement />} />
                 <Route path="admissions" element={<AdmissionsManagement />} />
                 <Route path="notices" element={<NoticesManagement />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="fees" element={<FeesManagement />} />
                 <Route path="exams" element={<Examinations />} />
-                <Route path="hostel" element={<HostelManagement />} />
+                <Route path="hostel" element={<HostelRouter />} />
                 <Route path="qr-attendance" element={<TeacherQRAttendance />} />
                 <Route path="student-qr" element={<StudentQRAttendance />} />
+                <Route path="students" element={<FacultyStudentProgress />} />
+                <Route path="books" element={<BookManagement />} />
+                <Route path="student-records" element={<StudentRecords />} />
+                <Route path="digital-library" element={<DigitalLibrary />} />
+                <Route path="scholarships" element={<Scholarships />} />
+                <Route path="library" element={<LibraryRouter />} />
+                <Route path="placement" element={<Placement />} /> {/* <-- add placement route */}
                 {/* Additional nested routes will be added here */}
               </Route>
             </Routes>
@@ -90,6 +107,23 @@ const DashboardRouter = () => {
     default:
       return <Navigate to="/login" replace />;
   }
+};
+
+// Add these routers below the Routes (keep near DashboardRouter)
+const LibraryRouter: React.FC = () => {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'STUDENT') return <StudentLibrary />;
+  // non-students: show digital library/admin view
+  return <DigitalLibrary />;
+};
+
+const HostelRouter: React.FC = () => {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'STUDENT') return <StudentHostel />;
+  // non-students: show hostel management view
+  return <HostelManagement />;
 };
 
 export default App;

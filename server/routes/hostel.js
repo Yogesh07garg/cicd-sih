@@ -126,4 +126,49 @@ router.get('/summary', authenticateToken, authorize('WARDEN'), async (req, res) 
   }
 });
 
+// All hostel routes require authentication
+router.use(authenticateToken);
+
+/**
+ * GET /api/hostel/allocations/me
+ * Return current student's allocation (if any) including room and block info
+ */
+router.get('/allocations/me', async (req, res) => {
+  try {
+    // ensure authenticateToken populated req.user
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    // tolerate common token payload shapes
+    const studentId = req.user?.id || req.user?.userId || req.user?.sub;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const allocation = await prisma.hostelAllocation.findUnique({
+      where: { studentId },
+      include: {
+        room: {
+          include: {
+            block: true
+          }
+        },
+        student: {
+          select: { id: true, firstName: true, lastName: true, studentId: true, department: true }
+        }
+      }
+    });
+
+    if (!allocation) {
+      return res.json({ success: true, data: null });
+    }
+
+    res.json({ success: true, data: allocation });
+  } catch (err) {
+    console.error('Get my hostel allocation error:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch hostel allocation' });
+  }
+});
+
 export default router;

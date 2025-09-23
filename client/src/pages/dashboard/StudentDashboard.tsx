@@ -68,17 +68,31 @@ const StudentDashboard: React.FC = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [recentAttendance, setRecentAttendance] = useState<AttendanceRecord[]>([]);
   const [markingAttendance, setMarkingAttendance] = useState(false);
+  const [issuedBooks, setIssuedBooks] = useState<any[]>([]);
+  const [issuedLoading, setIssuedLoading] = useState(false);
+  const [hostelAllocation, setHostelAllocation] = useState<any | null>(null);
+  const [hostelLoading, setHostelLoading] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
     fetchRecentAttendance();
     generateStudentQR();
+    fetchMyIssuedBooks();
+    fetchMyHostelAllocation();
 
     // Socket listeners for real-time updates
     if (socket) {
       socket.on('attendance_marked', () => {
         fetchRecentAttendance();
         fetchDashboardData();
+      });
+
+      socket.on('book_issued', () => {
+        fetchMyIssuedBooks();
+      });
+
+      socket.on('book_returned', () => {
+        fetchMyIssuedBooks();
       });
 
       socket.on('class_session_started', (data: any) => {
@@ -89,6 +103,8 @@ const StudentDashboard: React.FC = () => {
       return () => {
         socket.off('attendance_marked');
         socket.off('class_session_started');
+        socket.off('book_issued');
+        socket.off('book_returned');
       };
     }
   }, [socket]);
@@ -190,6 +206,45 @@ const StudentDashboard: React.FC = () => {
     }
 
     setShowScanner(true);
+  };
+
+  const fetchMyIssuedBooks = async () => {
+    try {
+      setIssuedLoading(true);
+      const res = await axios.get('/api/library/issued/me?limit=10');
+      setIssuedBooks(res.data.issues || []);
+    } catch (err) {
+      console.error('Fetch my issued books error', err);
+      toast.error('Failed to load your issued books');
+      setIssuedBooks([]);
+    } finally {
+      setIssuedLoading(false);
+    }
+  };
+
+  const returnBook = async (issueId: string) => {
+    if (!confirm('Mark this book as returned?')) return;
+    try {
+      await axios.post(`/api/library/return/${issueId}`);
+      toast.success('Book marked as returned');
+      fetchMyIssuedBooks();
+    } catch (err: any) {
+      console.error('Return book error', err);
+      toast.error(err.response?.data?.message || 'Failed to return book');
+    }
+  };
+
+  const fetchMyHostelAllocation = async () => {
+    try {
+      setHostelLoading(true);
+      const res = await axios.get('/api/hostel/allocations/me');
+      setHostelAllocation(res.data.data || null);
+    } catch (err) {
+      console.error('Fetch hostel allocation error', err);
+      setHostelAllocation(null);
+    } finally {
+      setHostelLoading(false);
+    }
   };
 
   const statCards = [
@@ -479,6 +534,73 @@ const StudentDashboard: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* New: Library & Hostel row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* My Library */}
+        <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">My Library</h2>
+            <div className="flex items-center space-x-2">
+              <button onClick={fetchMyIssuedBooks} className="px-3 py-1 bg-gray-100 rounded">Refresh</button>
+            </div>
+          </div>
+
+          {issuedLoading ? (
+            <div>Loading...</div>
+          ) : issuedBooks.length === 0 ? (
+            <div className="text-sm text-gray-500">You have no books issued</div>
+          ) : (
+            <div className="space-y-3">
+              {issuedBooks.map((issue:any) => (
+                <div key={issue.id} className="p-3 border rounded flex justify-between items-center">
+                  <div>
+                    <div className="font-medium">{issue.book?.title}</div>
+                    <div className="text-xs text-gray-500">{issue.book?.author} • {issue.book?.isbn || '—'}</div>
+                    <div className="text-xs text-gray-500 mt-1">Issued: {new Date(issue.issueDate).toLocaleDateString()} • Due: {issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : '—'}</div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {issue.status !== 'RETURNED' ? (
+                      <button onClick={()=>returnBook(issue.id)} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Return</button>
+                    ) : (
+                      <span className="text-sm text-gray-500">Returned</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* My Hostel */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">My Hostel</h2>
+            <div>
+              <button onClick={fetchMyHostelAllocation} className="px-3 py-1 bg-gray-100 rounded">Refresh</button>
+            </div>
+          </div>
+
+          {hostelLoading ? (
+            <div>Loading...</div>
+          ) : !hostelAllocation ? (
+            <div className="text-sm text-gray-500">No hostel allocation found</div>
+          ) : (
+            <div className="space-y-2">
+              <div className="font-medium">{hostelAllocation.room?.block?.name || hostelAllocation.room?.blockId || '—'} • Room {hostelAllocation.room?.roomNumber || '—'}</div>
+              <div className="text-sm text-gray-500">Bed: {hostelAllocation.bedNumber ?? '—'} • Status: {hostelAllocation.status}</div>
+              <div className="text-xs text-gray-500">Allocated at: {new Date(hostelAllocation.allocatedAt).toLocaleString()}</div>
+              {hostelAllocation.room && (
+                <div className="mt-3">
+                  <h4 className="text-sm font-medium">Room Details</h4>
+                  <div className="text-xs text-gray-500">Capacity: {hostelAllocation.room.capacity} • Occupied: {hostelAllocation.room.occupied}</div>
+                  <div className="text-xs text-gray-500 mt-1">Type: {hostelAllocation.room.roomType}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Quick Navigation */}

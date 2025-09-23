@@ -137,7 +137,7 @@ const RegisterPage: React.FC = () => {
                 <option value="ADMIN">Admin</option>
                 <option value="ACCOUNTANT">Accountant</option>
                 <option value="LIBRARIAN">Librarian</option>
-                <option value="WARDEN">Warden</option>
+                {/* <option value="WARDEN">Warden</option> */}
               </select>
               {errors.role && (
                 <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>

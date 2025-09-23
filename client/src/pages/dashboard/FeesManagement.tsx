@@ -437,13 +437,75 @@ const FeesManagement: React.FC = () => {
           {/* Admin payments table / controls (left as before) */}
           <div className="lg:col-span-2 bg-white p-4 rounded shadow">
             <h2 className="font-semibold mb-4">Latest Fee Payments</h2>
-            {/* Keep the admin payments table and controls unchanged from original implementation */}
-            {/* ...existing admin table & controls ... */}
-            {/* For brevity: existing admin payments table and pagination code remains unchanged */}
-            {/* (The previous code in this file already implements the admin table.) */}
+            {/* Admin payments table & controls */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <input value={paymentsSearch} onChange={e=>setPaymentsSearch(e.target.value)} placeholder="Search transactions" className="px-3 py-2 border rounded" />
+                <select value={paymentsModeFilter} onChange={e=>setPaymentsModeFilter(e.target.value)} className="px-3 py-2 border rounded">
+                  <option value="">All modes</option>
+                  <option value="ONLINE">Online</option>
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="UPI">UPI</option>
+                </select>
+                <button onClick={() => { setPaymentsPage(1); fetchPayments(1); }} className="px-3 py-2 bg-gray-100 rounded">Apply</button>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button onClick={() => { setPaymentsPage(1); fetchPayments(1); }} className="px-3 py-2 bg-gray-100 rounded">Refresh</button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-left text-xs text-gray-500">
+                  <tr>
+                    <th className="py-2 cursor-pointer" onClick={() => toggleSort('id')}>Txn ID</th>
+                    <th className="py-2 cursor-pointer" onClick={() => toggleSort('transactionAt')}>Date</th>
+                    <th className="py-2">Student</th>
+                    <th className="py-2">Student ID</th>
+                    <th className="py-2">Fee Type</th>
+                    <th className="py-2 cursor-pointer" onClick={() => toggleSort('amount')}>Amount</th>
+                    <th className="py-2">Mode</th>
+                    <th className="py-2">Status</th>
+                    <th className="py-2">Reference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentsLoading ? (
+                    <tr><td colSpan={9} className="p-4">Loading...</td></tr>
+                  ) : payments.length === 0 ? (
+                    <tr><td colSpan={9} className="p-4 text-sm text-gray-500">No payments found</td></tr>
+                  ) : payments.map((p:any) => (
+                    <tr key={p.id} className="border-t">
+                      <td className="py-2">{p.id}</td>
+                      <td className="py-2">{new Date(p.transactionAt).toLocaleString()}</td>
+                      <td className="py-2">{p.student ? `${p.student.firstName} ${p.student.lastName}` : '-'}</td>
+                      <td className="py-2">{p.student?.studentId || p.student?.id || '-'}</td>
+                      <td className="py-2">{p.fee?.feeType || p.feeCategory || '-'}</td>
+                      <td className="py-2">₹{Number(p.amount || 0).toLocaleString()}</td>
+                      <td className="py-2">{p.method}</td>
+                      <td className="py-2">{p.status}</td>
+                      <td className="py-2">{p.reference || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <div>
+                Page {paymentsPage} of {paymentsTotalPages}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button disabled={paymentsPage <= 1} onClick={() => onPaymentsPageChange(paymentsPage - 1)} className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50">Prev</button>
+                <button disabled={paymentsPage >= paymentsTotalPages} onClick={() => onPaymentsPageChange(paymentsPage + 1)} className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50">Next</button>
+              </div>
+            </div>
+            {/* end admin payments */}
           </div>
         </div>
-      )}
+      )} 
     </div>
   );
 };

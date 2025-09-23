@@ -64,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           ...baseItems,
           { name: 'QR Attendance', href: '/dashboard/student-qr', icon: QrCode },
           { name: 'Academics', href: '/dashboard/academics', icon: BookOpen },
+          { name: 'Notices', href: '/dashboard/notices', icon: Bell },
           { name: 'Fees', href: '/dashboard/fees', icon: CreditCard },
           { name: 'Library', href: '/dashboard/library', icon: BookOpen },
           { name: 'Hostel', href: '/dashboard/hostel', icon: Home },

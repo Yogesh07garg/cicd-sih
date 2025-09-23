@@ -1,281 +1,264 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, authorize } from '../middleware/auth.js';
 import auditLog from '../middleware/audit.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Apply authentication to all routes
+// All routes require authentication
 router.use(authenticateToken);
 
-// Get notices for current user
+/**
+ * GET /api/notices
+ * Notices visible to the current user (students see only published notices targeted to them)
+ */
 router.get('/', async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { page = 1, limit = 10 } = req.query;
-    const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
+    const user = req.user;
+    const where= { isPublished: true };
+
+    // Students: filter by audience
+    if (user.role === 'STUDENT') {
+      where.OR = [
+        { targetAudience: 'ALL' },
+        { targetAudience: 'STUDENTS' },
+        {
+          AND: [
+            { targetAudience: 'DEPARTMENT' },
+            { targetValue: user.department || null }
+          ]
+        }
+      ];
+    } else {
+      // Faculty/Admin/others: return all published notices by default
+      // Admin/Faculty management endpoints use /admin route
+    }
 
     const notices = await prisma.notice.findMany({
-      where: {
-        isPublished: true,
-        OR: [
-          { targetAudience: 'ALL' },
-          { 
-            AND: [
-              { targetAudience: 'STUDENTS' },
-              { author: { role: { in: ['ADMIN', 'FACULTY'] } } }
-            ]
-          },
-          { 
-            AND: [
-              { targetAudience: 'FACULTY' },
-              { author: { role: 'ADMIN' } }
-            ]
-          },
-          {
-            AND: [
-              { targetAudience: 'DEPARTMENT' },
-              { targetValue: req.user.department }
-            ]
-          }
-        ]
-      },
+      where,
       include: {
-        author: {
-          select: {
-            firstName: true,
-            lastName: true,
-            role: true
-          }
-        },
-        recipients: {
-          where: { userId },
-          select: { readAt: true }
-        }
+        author: { select: { id: true, firstName: true, lastName: true, role: true } },
+        recipients: { select: { userId: true, readAt: true } }
       },
       orderBy: { publishedAt: 'desc' },
-      skip,
-      take: parseInt(String(limit))
+      take: 100
     });
 
     res.json(notices);
   } catch (error) {
     console.error('Get notices error:', error);
-    res.status(500).json({ message: 'Failed to fetch notices' });
+    res.status(500).json({ success: false, message: 'Failed to fetch notices' });
   }
 });
 
-// Create notice (Admin/Faculty only)
-router.post('/', auditLog('CREATE', 'Notice'), async (req, res) => {
+/**
+ * POST /api/notices
+ * Create notice (Admin/Faculty)
+ */
+router.post('/', authorize('ADMIN', 'FACULTY'), auditLog('CREATE', 'Notice'), async (req, res) => {
   try {
-    const authorId = req.user.id;
-    const { title, content, priority, targetAudience, targetValue, publishNow } = req.body;
+    const {
+      title,
+      content,
+      priority = 'NORMAL',
+      targetAudience = 'ALL',
+      targetValue = null,
+      attachments = null,
+      isPublished = false,
+      expiresAt = null,
+      pinned = false
+    } = req.body;
 
-    if (!['ADMIN', 'FACULTY'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Not authorized to create notices' });
+    if (!title || !content) {
+      return res.status(400).json({ success: false, message: 'title and content are required' });
     }
 
-    const notice = await prisma.notice.create({
+    const publishedAt = isPublished ? new Date() : null;
+
+    const created = await prisma.notice.create({
       data: {
-        title,
+        title: title.trim(),
         content,
-        priority: priority || 'NORMAL',
-        targetAudience: targetAudience || 'ALL',
+        priority,
+        targetAudience,
         targetValue,
-        authorId,
-        isPublished: publishNow || false,
-        publishedAt: publishNow ? new Date() : null
+        attachments,
+        isPublished,
+        publishedAt,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        pinned,
+        authorId: req.user.id
       },
-      include: {
-        author: {
-          select: {
-            firstName: true,
-            lastName: true,
-            role: true
-          }
-        }
-      }
+      include: { author: { select: { id: true, firstName: true, lastName: true, role: true } } }
     });
 
-    if (publishNow) {
+    // Broadcast only if published
+    if (isPublished) {
       const io = req.app.get('io');
-      
-      let targetRooms = [];
-      if (targetAudience === 'ALL') {
-        targetRooms = ['STUDENT', 'FACULTY', 'ADMIN', 'ACCOUNTANT', 'LIBRARIAN', 'WARDEN'];
-      } else if (targetAudience === 'STUDENTS') {
-        targetRooms = ['STUDENT'];
-      } else if (targetAudience === 'FACULTY') {
-        targetRooms = ['FACULTY'];
-      }
-
-      targetRooms.forEach(room => {
-        io.to(room).emit('new_notice', {
-          id: notice.id,
-          title: notice.title,
-          priority: notice.priority,
-          author: notice.author
+      if (io) {
+        io.to('STUDENT').emit('new_notice', {
+          id: created.id,
+          title: created.title,
+          priority: created.priority,
+          targetAudience: created.targetAudience
         });
-      });
+      }
     }
 
-    res.status(201).json(notice);
+    res.status(201).json({ success: true, data: created });
   } catch (error) {
     console.error('Create notice error:', error);
-    res.status(500).json({ message: 'Failed to create notice' });
+    res.status(500).json({ success: false, message: 'Failed to create notice' });
   }
 });
 
-// Mark notice as read
+/**
+ * PUT /api/notices/:id
+ * Update notice (Admin/Faculty)
+ */
+router.put('/:id', authorize('ADMIN', 'FACULTY'), auditLog('UPDATE', 'Notice'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const payload = req.body;
+
+    const existing = await prisma.notice.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ success: false, message: 'Notice not found' });
+
+    // Handle publishedAt if isPublished toggled
+    if (payload.isPublished !== undefined) {
+      if (payload.isPublished && !existing.isPublished) {
+        payload.publishedAt = new Date();
+      } else if (!payload.isPublished && existing.isPublished) {
+        payload.publishedAt = null;
+      }
+    }
+
+    if (payload.expiresAt === '') payload.expiresAt = null;
+
+    const updated = await prisma.notice.update({
+      where: { id },
+      data: {
+        ...payload,
+        title: payload.title ? String(payload.title).trim() : undefined,
+        content: payload.content ?? undefined
+      },
+      include: { author: { select: { id: true, firstName: true, lastName: true } } }
+    });
+
+    // If newly published, broadcast
+    if (payload.isPublished && !existing.isPublished) {
+      const io = req.app.get('io');
+      if (io) {
+        io.to('STUDENT').emit('new_notice', {
+          id: updated.id,
+          title: updated.title,
+          priority: updated.priority
+        });
+      }
+    }
+
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Update notice error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update notice' });
+  }
+});
+
+/**
+ * POST /api/notices/:id/read
+ * Mark notice as read for current user
+ */
 router.post('/:id/read', async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
-    await prisma.noticeRecipient.upsert({
-      where: {
-        noticeId_userId: {
-          noticeId: id,
-          userId
-        }
-      },
-      update: {
-        readAt: new Date()
-      },
-      create: {
-        noticeId: id,
-        userId,
-        readAt: new Date()
-      }
-    });
+    const notice = await prisma.notice.findUnique({ where: { id } });
+    if (!notice) return res.status(404).json({ success: false, message: 'Notice not found' });
 
-    res.json({ message: 'Notice marked as read' });
+    // Upsert recipient (create if not exists, update readAt if exists)
+    const existing = await prisma.noticeRecipient.findUnique({ where: { noticeId_userId: { noticeId: id, userId } } });
+    if (existing) {
+      await prisma.noticeRecipient.update({
+        where: { id: existing.id },
+        data: { readAt: new Date() }
+      });
+    } else {
+      await prisma.noticeRecipient.create({
+        data: { noticeId: id, userId, readAt: new Date() }
+      });
+    }
+
+    res.json({ success: true, message: 'Marked as read' });
   } catch (error) {
-    console.error('Mark notice read error:', error);
-    res.status(500).json({ message: 'Failed to mark notice as read' });
+    console.error('Mark read error:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark as read' });
   }
 });
 
-// Admin: list all notices (with filters, pagination)
-router.get('/admin', async (req, res) => {
+/**
+ * GET /api/notices/admin
+ * Admin/Faculty: list all notices with optional filters
+ */
+router.get('/admin', authorize('ADMIN', 'FACULTY'), async (req, res) => {
   try {
-    if (!['ADMIN', 'FACULTY'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Not authorized' });
-    }
-
-    const { page = 1, limit = 20, search, category, author } = req.query;
-    const pageNum = parseInt(String(page)) || 1;
-    const limitNum = parseInt(String(limit)) || 20;
+    const { page = 1, limit = 50, search, priority, audience } = req.query;
+    const pageNum = Math.max(1, parseInt(String(page) || '1'));
+    const limitNum = Math.min(200, parseInt(String(limit) || '50'));
     const skip = (pageNum - 1) * limitNum;
 
-    const where = {
-      AND: [
-        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }
-      ]
-    };
-
+    const where = {};
     if (search) {
-      where.AND.push({
-        OR: [
-          { title: { contains: String(search), mode: 'insensitive' } },
-          { content: { contains: String(search), mode: 'insensitive' } }
-        ]
-      });
+      where.OR = [
+        { title: { contains: String(search) } },
+        { content: { contains: String(search) } }
+      ];
     }
+    if (priority) where.priority = String(priority);
+    if (audience) where.targetAudience = String(audience);
 
-    if (category) {
-      where.AND.push({ priority: String(category) });
-    }
-
-    if (author) {
-      where.AND.push({
-        OR: [
-          { author: { firstName: { contains: String(author), mode: 'insensitive' } } },
-          { author: { lastName: { contains: String(author), mode: 'insensitive' } } }
-        ]
-      });
-    }
-
-    const [notices, total] = await Promise.all([
+    const [items, total] = await Promise.all([
       prisma.notice.findMany({
         where,
         include: {
-          author: { select: { firstName: true, lastName: true, role: true } },
+          author: { select: { id: true, firstName: true, lastName: true, role: true } },
+          recipients: { select: { userId: true, readAt: true } }
         },
-        orderBy: [{ publishedAt: 'desc' }],
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limitNum
       }),
       prisma.notice.count({ where })
     ]);
 
-    res.json({ notices, pagination: { total, page: pageNum, pages: Math.ceil(total / limitNum) } });
+    res.json({ success: true, notices: items, pagination: { total, page: pageNum, pages: Math.ceil(total / limitNum) } });
   } catch (error) {
-    console.error('Admin get notices error:', error);
-    res.status(500).json({ message: 'Failed to fetch notices' });
+    console.error('Admin list notices error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch notices' });
   }
 });
 
-// Admin: update a notice
-router.put('/:id', auditLog('UPDATE', 'Notice'), async (req, res) => {
+/**
+ * DELETE /api/notices/:id
+ * Admin/Faculty: delete a notice
+ */
+router.delete('/:id', authorize('ADMIN', 'FACULTY'), auditLog('DELETE', 'Notice'), async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await prisma.notice.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ success: false, message: 'Notice not found' });
 
-    if (!['ADMIN', 'FACULTY'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Not authorized' });
-    }
-
-    const { title, content, priority, targetAudience, targetValue, isPublished, publishedAt, expiresAt } = req.body;
-
-    const updated = await prisma.notice.update({
-      where: { id },
-      data: {
-        title,
-        content,
-        priority,
-        targetAudience,
-        targetValue,
-        isPublished: typeof isPublished === 'boolean' ? isPublished : undefined,
-        publishedAt: publishedAt ? new Date(publishedAt) : undefined,
-        expiresAt: expiresAt ? new Date(expiresAt) : null
-      },
-      include: {
-        author: { select: { firstName: true, lastName: true, role: true } }
-      }
-    });
-
-    if (updated.isPublished) {
-      const io = req.app.get('io');
-      const targetRooms = updated.targetAudience === 'ALL' ? ['STUDENT','FACULTY','ADMIN','ACCOUNTANT','LIBRARIAN','WARDEN'] :
-        updated.targetAudience === 'STUDENTS' ? ['STUDENT'] :
-        updated.targetAudience === 'FACULTY' ? ['FACULTY'] : [];
-      targetRooms.forEach(room => io.to(room).emit('new_notice', {
-        id: updated.id, title: updated.title, priority: updated.priority, author: updated.author
-      }));
-    }
-
-    res.json(updated);
-  } catch (error) {
-    console.error('Update notice error:', error);
-    res.status(500).json({ message: 'Failed to update notice' });
-  }
-});
-
-// Admin: delete a notice
-router.delete('/:id', auditLog('DELETE', 'Notice'), async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!['ADMIN', 'FACULTY'].includes(req.user.role)) {
-      return res.status(403).json({ message: 'Not authorized' });
+    // Only author or admin can delete
+    if (req.user.role !== 'ADMIN' && req.user.id !== existing.authorId) {
+      return res.status(403).json({ success: false, message: 'Not authorized to delete this notice' });
     }
 
     await prisma.notice.delete({ where: { id } });
-    res.json({ message: 'Notice deleted' });
+    res.json({ success: true, message: 'Notice deleted' });
   } catch (error) {
     console.error('Delete notice error:', error);
-    res.status(500).json({ message: 'Failed to delete notice' });
+    res.status(500).json({ success: false, message: 'Failed to delete notice' });
   }
 });
 

@@ -90,6 +90,15 @@ model User {
   studentQRCode          StudentQRCode?
   classSessions          ClassSession[]
   studentClassAttendance StudentClassAttendance[]
+  StudyMaterial          StudyMaterial[]
+
+  // Student progress relations (separate arrays for when the user is the student vs the teacher)
+  studentProgressEntries StudentProgress[] @relation("StudentProgress_student")
+  studentProgressGiven   StudentProgress[] @relation("StudentProgress_teacher")
+
+  // Assignment submissions relations (received as student vs created by teacher)
+  assignmentSubmissionsReceived AssignmentSubmission[] @relation("AssignmentSubmission_student")
+  assignmentSubmissionsGiven    AssignmentSubmission[] @relation("AssignmentSubmission_teacher")
 
   @@map("users")
 }
@@ -612,4 +621,58 @@ model StudentClassAttendance {
 
   @@unique([sessionId, studentId])
   @@map("student_class_attendance")
+}
+
+// Add StudyMaterial model for academics (place near other content models)
+model StudyMaterial {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  course      String? // course/program identifier
+  subject     String? // subject / topic
+  storagePath String   @db.Text // URL or data URL where file is stored
+  visibility  String   @default("ALL") // ALL, STUDENTS, FACULTY, DEPARTMENT
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("study_materials")
+}
+
+model StudentProgress {
+  id                   String   @id @default(cuid())
+  studentId            String
+  subject              String
+  marksObtained        Float
+  totalMarks           Float
+  assignmentsSubmitted Int      @default(0)
+  assignmentsTotal     Int      @default(0)
+  teacherId            String? // nullable so onDelete: SetNull can work
+  notes                String?  @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  student User  @relation("StudentProgress_student", fields: [studentId], references: [id], onDelete: Cascade)
+  teacher User? @relation("StudentProgress_teacher", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@map("student_progress")
+}
+
+model AssignmentSubmission {
+  id          String   @id @default(cuid())
+  studentId   String
+  teacherId   String? // nullable so onDelete: SetNull can work
+  title       String
+  submittedAt DateTime @default(now())
+  marks       Float?
+  maxMarks    Float?
+  remarks     String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student User  @relation("AssignmentSubmission_student", fields: [studentId], references: [id], onDelete: Cascade)
+  teacher User? @relation("AssignmentSubmission_teacher", fields: [teacherId], references: [id], onDelete: SetNull)
+
+  @@map("assignment_submissions")
 }

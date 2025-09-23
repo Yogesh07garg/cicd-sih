@@ -11,7 +11,7 @@ const LibrarianDashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-2">Total Books</p>
-              <p className="text-2xl font-bold text-gray-900">15,450</p>
+              <p className="text-2xl font-bold text-gray-900">1</p>
               <p className="text-sm text-blue-600 font-medium">+50 this month</p>
             </div>
             <div className="p-3 rounded-lg bg-blue-50">
