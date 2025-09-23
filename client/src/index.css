@@ -40,3 +40,58 @@
 .ql-editor {
   min-height: 120px;
 }
+
+/* AI Chatbot specific styles */
+.ai-chatbot-slide-in {
+  animation: slideInRight 0.3s ease-out;
+}
+
+.ai-chatbot-slide-out {
+  animation: slideOutRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Custom scrollbar for chatbot */
+.chatbot-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chatbot-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.chatbot-messages::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.chatbot-messages::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* Ensure chatbot doesn't interfere with other elements */
+.ai-chatbot-overlay {
+  backdrop-filter: blur(2px);
+}

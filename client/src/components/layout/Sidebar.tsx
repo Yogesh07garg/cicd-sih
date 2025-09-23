@@ -17,7 +17,8 @@ import { X,
   CreditCard,
   Home,
   UserCog,
-  ClipboardList
+  ClipboardList,
+  Brain
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -47,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           { name: 'Fees Management', href: '/dashboard/fees', icon: DollarSign },
           { name: 'Examinations', href: '/dashboard/exams', icon: ClipboardList },
           { name: 'Hostel Management', href: '/dashboard/hostel', icon: Building },
+          { name: 'AI Screen Agent', href: '/dashboard/ai-agent', icon: Brain, isAIAgent: true },
         ];
       
       case 'FACULTY':
@@ -147,16 +149,25 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                   to={item.href}
                   className={`
                     flex items-center px-4 py-3 text-sm font-medium rounded-lg
-                    transition-colors duration-200
+                    transition-colors duration-200 group
                     ${isActive 
                       ? 'bg-sidebar-light text-white' 
                       : 'text-gray-200 hover:bg-sidebar-hover hover:text-white'
                     }
+                    ${item.isAIAgent ? 'relative overflow-hidden' : ''}
                   `}
                   onClick={() => onClose()}
                 >
                   <Icon className="h-5 w-5 mr-3" />
                   {item.name}
+                  {item.isAIAgent && (
+                    <>
+                      <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-blue-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <div className="ml-auto">
+                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
+                      </div>
+                    </>
+                  )}
                 </Link>
               );
             })}

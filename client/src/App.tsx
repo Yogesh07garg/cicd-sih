@@ -33,7 +33,8 @@ import DigitalLibrary from './pages/dashboard/DigitalLibrary';
 import Scholarships from './pages/dashboard/Scholarships';
 import StudentLibrary from './pages/dashboard/StudentLibrary';
 import StudentHostel from './pages/dashboard/StudentHostel';
-import Placement from './pages/dashboard/Placement'; // <-- add import
+import Placement from './pages/dashboard/Placement';
+import AdminAIAgent from './pages/ai/AdminAIAgent';
 
 function App() {
   return (
@@ -73,7 +74,15 @@ function App() {
                 <Route path="digital-library" element={<DigitalLibrary />} />
                 <Route path="scholarships" element={<Scholarships />} />
                 <Route path="library" element={<LibraryRouter />} />
-                <Route path="placement" element={<Placement />} /> {/* <-- add placement route */}
+                <Route path="placement" element={<Placement />} />
+                <Route 
+                  path="ai-agent" 
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN']}>
+                      <AdminAIAgent />
+                    </ProtectedRoute>
+                  } 
+                />
                 {/* Additional nested routes will be added here */}
               </Route>
             </Routes>

@@ -22,7 +22,8 @@ import qrAttendanceRoutes from './routes/qr-attendance.js'; // Importing QR atte
 import academicsRoutes from './routes/academics.js'; // Import academics routes
 import facultyProgressRoutes from './routes/facultyProgress.js'; // Import faculty progress routes
 import libraryRoutes from './routes/library.js'; // Import library routes
-import placementRoutes from './routes/placement.js'; // <-- added placement routes
+import placementRoutes from './routes/placement.js';
+import aiChatbotRoutes from './routes/ai-chatbot.js'; // New import
 
 // Load environment variables
 dotenv.config();
@@ -66,7 +67,8 @@ app.use('/api/qr-attendance', qrAttendanceRoutes); // Registering QR attendance 
 app.use('/api/academics', academicsRoutes); // Register academics routes
 app.use('/api/faculty/progress', facultyProgressRoutes); // Faculty: student progress routes
 app.use('/api/library', libraryRoutes); // Librarian: books, issued records, digital library
-app.use('/api/placement', placementRoutes); // <-- register placement routes
+app.use('/api/placement', placementRoutes);
+app.use('/api/ai-chatbot', aiChatbotRoutes); // Register AI chatbot routes
 
 // Health check
 app.get('/api/health', (req, res) => {
