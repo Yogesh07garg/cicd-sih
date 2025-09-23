@@ -16,6 +16,7 @@ import feesRoutes from './routes/fees.js'; // Importing fees routes
 import reportsRoutes from './routes/reports.js'; // Importing reports routes
 import examsRoutes from './routes/exams.js';
 import hostelRoutes from './routes/hostel.js';
+import qrAttendanceRoutes from './routes/qr-attendance.js'; // Importing QR attendance routes
 
 // Load environment variables
 dotenv.config();
@@ -51,6 +52,7 @@ app.use('/api/fees', feesRoutes); // Registering fees routes
 app.use('/api/reports', reportsRoutes); // Registering reports routes
 app.use('/api/exams', examsRoutes);
 app.use('/api/hostel', hostelRoutes);
+app.use('/api/qr-attendance', qrAttendanceRoutes); // Registering QR attendance routes
 
 // Health check
 app.get('/api/health', (req, res) => {

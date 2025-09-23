@@ -63,6 +63,20 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         });
       });
 
+      // Listen for class session updates
+      newSocket.on('class_session_started', (data) => {
+        if (user.role === 'STUDENT') {
+          toast(`New class session: ${data.subject}`, { duration: 4000 });
+        }
+      });
+
+      // Listen for session ended notifications
+      newSocket.on('class_session_ended', (data) => {
+        if (user.role === 'STUDENT') {
+          toast(`Class session ended: ${data.subject}`, { duration: 3000 });
+        }
+      });
+
       setSocket(newSocket);
 
       return () => {

@@ -7,51 +7,189 @@ import {
   Bell,
   GraduationCap,
   TrendingUp,
-  Clock
+  Clock,
+  MapPin,
+  AlertCircle,
+  CheckCircle,
+  Scan,
+  Camera,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
+import { useLocation } from '../../hooks/useLocation';
+import QRScanner from '../../components/QRScanner';
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 interface StudentStats {
   attendancePercentage: number;
   pendingAssignments: number;
   upcomingExams: number;
   pendingFees: number;
-  borrowedBooks: number;
-  notices: number;
+  totalClasses: number;
+  presentClasses: number;
+  recentNotices: any[];
+}
+
+interface AttendanceRecord {
+  id: string;
+  markedAt: string;
+  isValid: boolean;
+  session: {
+    subject: string;
+    className: string;
+    startTime: string;
+    teacher: {
+      firstName: string;
+      lastName: string;
+      employeeId: string;
+    };
+  };
 }
 
 const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { socket } = useSocket();
+  const { location, error: locationError, loading: locationLoading, requestLocation } = useLocation();
+  
   const [stats, setStats] = useState<StudentStats>({
     attendancePercentage: 0,
     pendingAssignments: 0,
     upcomingExams: 0,
     pendingFees: 0,
-    borrowedBooks: 0,
-    notices: 0
+    totalClasses: 0,
+    presentClasses: 0,
+    recentNotices: []
   });
+  
   const [loading, setLoading] = useState(true);
-  const [recentNotices, setRecentNotices] = useState([]);
+  const [studentQR, setStudentQR] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [recentAttendance, setRecentAttendance] = useState<AttendanceRecord[]>([]);
+  const [markingAttendance, setMarkingAttendance] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+    fetchRecentAttendance();
+    generateStudentQR();
+
+    // Socket listeners for real-time updates
+    if (socket) {
+      socket.on('attendance_marked', () => {
+        fetchRecentAttendance();
+        fetchDashboardData();
+      });
+
+      socket.on('class_session_started', (data: any) => {
+        // use toast(...) instead of toast.info
+        toast(`📚 New class session: ${data.subject} - ${data.className}`);
+      });
+
+      return () => {
+        socket.off('attendance_marked');
+        socket.off('class_session_started');
+      };
+    }
+  }, [socket]);
 
   const fetchDashboardData = async () => {
     try {
-      const [statsResponse, noticesResponse] = await Promise.all([
-        axios.get('/api/student/dashboard-stats'),
-        axios.get('/api/student/recent-notices')
-      ]);
-      
-      setStats(statsResponse.data);
-      setRecentNotices(noticesResponse.data);
+      const response = await axios.get('/api/student/dashboard-stats');
+      setStats({
+        ...response.data,
+        pendingAssignments: 5, // Mock data
+        upcomingExams: 2, // Mock data
+      });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchRecentAttendance = async () => {
+    try {
+      const response = await axios.get('/api/qr-attendance/student/attendance-history?limit=5');
+      setRecentAttendance(response.data.attendance || []);
+    } catch (error) {
+      console.error('Failed to fetch attendance history:', error);
+    }
+  };
+
+  const generateStudentQR = async () => {
+    try {
+      const response = await axios.post('/api/qr-attendance/student/generate-qr');
+      setStudentQR(response.data.qrCode);
+    } catch (error: any) {
+      console.error('Failed to generate student QR:', error);
+    }
+  };
+
+  const handleQRScan = async (qrData: string) => {
+    if (!location) {
+      // Allow scanning without location for development / testing.
+      toast.warning('Location not available — proceeding without location (development/testing). Attendance will be recorded but location validation will be skipped.', { duration: 6000 });
+    }
+
+    setMarkingAttendance(true);
+    
+    try {
+      const payload = {
+        sessionQRData: qrData,
+        latitude: location?.latitude ?? null,
+        longitude: location?.longitude ?? null,
+        deviceInfo: navigator.userAgent
+      };
+
+      const response = await axios.post('/api/qr-attendance/student/mark-attendance', payload);
+      
+      if (response.data.locationValid) {
+        toast.success('✅ Attendance marked successfully!');
+        if (socket) {
+          socket.emit('attendance_marked', {
+            subject: response.data.session.subject,
+            studentId: user?.id
+          });
+        }
+      } else {
+        // When we don't have location, server will set locationValid according to session and provided coords.
+        toast.success('⚠️ Attendance marked. Note: location validation not available or failed.');
+      }
+      
+      // Refresh data
+      await Promise.all([
+        fetchDashboardData(),
+        fetchRecentAttendance()
+      ]);
+      
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.message || 'Failed to mark attendance');
+    } finally {
+      setMarkingAttendance(false);
+      setShowScanner(false);
+    }
+  };
+
+  const startQRScanning = async () => {
+    // Check if student QR exists first
+    if (!studentQR) {
+      toast.error('Please generate your student QR code first');
+      await generateStudentQR();
+      return;
+    }
+
+    // If location not available, allow proceeding for development/testing.
+    if (!location) {
+      toast('Location not available — opening camera. You can still scan QR for testing.');
+    } else {
+      // still try to refresh location if possible (no blocking)
+      requestLocation().catch(() => {});
+    }
+
+    setShowScanner(true);
   };
 
   const statCards = [
@@ -61,7 +199,7 @@ const StudentDashboard: React.FC = () => {
       icon: Calendar,
       color: stats.attendancePercentage >= 75 ? 'text-green-600' : 'text-red-600',
       bgColor: stats.attendancePercentage >= 75 ? 'bg-green-50' : 'bg-red-50',
-      trend: stats.attendancePercentage >= 75 ? 'Good' : 'Low'
+      trend: `${stats.presentClasses}/${stats.totalClasses} classes`
     },
     {
       title: 'Pending Assignments',
@@ -89,6 +227,15 @@ const StudentDashboard: React.FC = () => {
     }
   ];
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
       <div className="animate-pulse space-y-6">
@@ -103,6 +250,7 @@ const StudentDashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -112,18 +260,49 @@ const StudentDashboard: React.FC = () => {
             {user?.department} • Student ID: {user?.studentId}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Today</p>
-          <p className="text-lg font-semibold text-gray-900">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
-          </p>
+        <div className="flex items-center space-x-3">
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Today</p>
+            <p className="text-lg font-semibold text-gray-900">
+              {new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              fetchDashboardData();
+              fetchRecentAttendance();
+            }}
+            className="flex items-center px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </button>
         </div>
       </div>
+
+      {/* Location Status Alert */}
+      {locationError && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-orange-600 mr-2" />
+            <div>
+              <h3 className="text-sm font-medium text-orange-800">Location Access Required</h3>
+              <p className="text-sm text-orange-700 mt-1">{locationError}</p>
+              <button
+                onClick={requestLocation}
+                className="mt-2 text-sm bg-orange-600 text-white px-3 py-1 rounded hover:bg-orange-700"
+              >
+                Enable Location
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -142,7 +321,7 @@ const StudentDashboard: React.FC = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {card.value}
                   </p>
-                  <p className={`text-sm mt-1 font-medium ${card.color}`}>
+                  <p className="text-sm text-gray-500 mt-1">
                     {card.trend}
                   </p>
                 </div>
@@ -157,24 +336,53 @@ const StudentDashboard: React.FC = () => {
 
       {/* QR Code and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* QR Code Scanner */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <QrCode className="h-5 w-5 mr-2 text-primary-600" />
-            Quick QR Access
+            <Camera className="h-5 w-5 mr-2 text-primary-600" />
+            Mark Attendance
           </h2>
-          <div className="text-center">
-            <div className="w-32 h-32 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
-              <QrCode className="h-16 w-16 text-gray-400" />
+          
+          <div className="text-center space-y-4">
+            {location ? (
+              <div className="flex items-center justify-center text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                <MapPin className="h-4 w-4 mr-2" />
+                Location enabled ✅
+              </div>
+            ) : (
+              <div className="flex items-center justify-center text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
+                <AlertCircle className="h-4 w-4 mr-2" />
+                Location required
+              </div>
+            )}
+            
+            <div className="relative">
+              <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mx-auto mb-4 flex items-center justify-center">
+                <Camera className="h-10 w-10 text-white" />
+              </div>
+              {markingAttendance && (
+                <div className="absolute inset-0 bg-white bg-opacity-75 rounded-lg flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              )}
             </div>
-            <p className="text-sm text-gray-600 mb-3">
-              Show this QR code to faculty for attendance
-            </p>
-            <button className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors">
-              Generate QR Code
+            
+            <button
+              onClick={startQRScanning}
+              disabled={markingAttendance || locationLoading}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+            >
+              <Scan className="h-5 w-5 mr-2" />
+              {markingAttendance ? 'Marking...' : 'Scan Class QR Code'}
             </button>
+            
+            <p className="text-xs text-gray-500">
+              Click to open camera and scan teacher's QR code
+            </p>
           </div>
         </div>
 
+        {/* Today's Schedule */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Schedule</h2>
           <div className="space-y-3">
@@ -202,26 +410,75 @@ const StudentDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Recent Notices */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <Bell className="h-5 w-5 mr-2 text-primary-600" />
             Recent Notices
           </h2>
           <div className="space-y-3">
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-900">Semester Exam Schedule</p>
-              <p className="text-xs text-gray-600 mt-1">Published 2 hours ago</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-900">Library Holiday Notice</p>
-              <p className="text-xs text-gray-600 mt-1">Published 1 day ago</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm font-medium text-gray-900">Fee Payment Reminder</p>
-              <p className="text-xs text-gray-600 mt-1">Published 2 days ago</p>
-            </div>
+            {stats.recentNotices?.slice(0, 3).map((notice, index) => (
+              <div key={notice.id || index} className="p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium text-gray-900">{notice.title}</p>
+                <p className="text-xs text-gray-600 mt-1">{formatDate(notice.publishedAt)}</p>
+              </div>
+            ))}
+            {(!stats.recentNotices || stats.recentNotices.length === 0) && (
+              <div className="text-sm text-gray-500">No recent notices</div>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Recent Attendance */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Attendance</h2>
+        
+        {recentAttendance.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <Clock className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+            <p>No attendance records found</p>
+            <p className="text-sm">Start marking attendance to see your history</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recentAttendance.map((record) => (
+              <div key={record.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <div className={`w-3 h-3 rounded-full ${record.isValid ? 'bg-green-500' : 'bg-orange-500'}`} />
+                  <div>
+                    <h3 className="font-medium text-gray-900">
+                      {record.session.subject} - {record.session.className}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {record.session.teacher.firstName} {record.session.teacher.lastName}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="text-right">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Clock className="h-4 w-4 mr-1" />
+                    {formatDate(record.markedAt)}
+                  </div>
+                  <div className="flex items-center mt-1">
+                    {record.isValid ? (
+                      <span className="text-xs text-green-600 flex items-center">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Valid
+                      </span>
+                    ) : (
+                      <span className="text-xs text-orange-600 flex items-center">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Location Issue
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Quick Navigation */}
@@ -246,6 +503,13 @@ const StudentDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* QR Scanner Modal */}
+      <QRScanner
+        isOpen={showScanner}
+        onScan={handleQRScan}
+        onClose={() => setShowScanner(false)}
+      />
     </div>
   );
 };

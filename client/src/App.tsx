@@ -23,6 +23,8 @@ import Reports from './pages/dashboard/Reports';
 import FeesManagement from './pages/dashboard/FeesManagement';
 import Examinations from './pages/dashboard/Examinations';
 import HostelManagement from './pages/dashboard/HostelManagement';
+import TeacherQRAttendance from './pages/dashboard/TeacherQRAttendance';
+import StudentQRAttendance from './pages/dashboard/StudentQRAttendance';
 
 function App() {
   return (
@@ -53,6 +55,8 @@ function App() {
                 <Route path="fees" element={<FeesManagement />} />
                 <Route path="exams" element={<Examinations />} />
                 <Route path="hostel" element={<HostelManagement />} />
+                <Route path="qr-attendance" element={<TeacherQRAttendance />} />
+                <Route path="student-qr" element={<StudentQRAttendance />} />
                 {/* Additional nested routes will be added here */}
               </Route>
             </Routes>

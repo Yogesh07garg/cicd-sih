@@ -85,6 +85,12 @@ model User {
   MaintenanceRequest     MaintenanceRequest[]
   VisitorLog             VisitorLog[]
 
+  // New relations for QR-based attendance
+  teacherQRCode          TeacherQRCode?
+  studentQRCode          StudentQRCode?
+  classSessions          ClassSession[]
+  studentClassAttendance StudentClassAttendance[]
+
   @@map("users")
 }
 
@@ -542,4 +548,68 @@ model VisitorLog {
   student User @relation(fields: [studentId], references: [id])
 
   @@map("visitor_logs")
+}
+
+model TeacherQRCode {
+  id          String    @id @default(cuid())
+  teacherId   String    @unique
+  qrCodeData  String    @unique
+  isActive    Boolean   @default(true)
+  generatedAt DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  teacher User @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("teacher_qr_codes")
+}
+
+model StudentQRCode {
+  id          String    @id @default(cuid())
+  studentId   String    @unique
+  qrCodeData  String    @unique
+  isActive    Boolean   @default(true)
+  generatedAt DateTime  @default(now())
+  lastUsedAt  DateTime?
+
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("student_qr_codes")
+}
+
+model ClassSession {
+  id               String    @id @default(cuid())
+  teacherId        String
+  subject          String
+  className        String
+  sessionQRData    String    @unique
+  startTime        DateTime  @default(now())
+  endTime          DateTime?
+  location         String?
+  latitude         Float?
+  longitude        Float?
+  attendanceWindow Int       @default(5) // minutes
+  isActive         Boolean   @default(true)
+
+  teacher           User                     @relation(fields: [teacherId], references: [id])
+  studentAttendance StudentClassAttendance[]
+
+  @@map("class_sessions")
+}
+
+model StudentClassAttendance {
+  id         String   @id @default(cuid())
+  sessionId  String
+  studentId  String
+  markedAt   DateTime @default(now())
+  latitude   Float?
+  longitude  Float?
+  deviceInfo String?  @db.Text
+  ipAddress  String?
+  isValid    Boolean  @default(true)
+
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@map("student_class_attendance")
 }

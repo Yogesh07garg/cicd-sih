@@ -40,19 +40,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         return [
           ...baseItems,
           { name: 'User Management', href: '/dashboard/users', icon: Users },
+          { name: 'QR Attendance System', href: '/dashboard/qr-attendance', icon: QrCode },
           { name: 'Admissions', href: '/dashboard/admissions', icon: UserCheck },
           { name: 'Notice Board', href: '/dashboard/notices', icon: Bell },
           { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
           { name: 'Fees Management', href: '/dashboard/fees', icon: DollarSign },
           { name: 'Examinations', href: '/dashboard/exams', icon: ClipboardList },
           { name: 'Hostel Management', href: '/dashboard/hostel', icon: Building },
-          // { name: 'AI Tools', href: '/dashboard/ai-tools', icon: Settings },
         ];
       
       case 'FACULTY':
         return [
           ...baseItems,
-          { name: 'QR Attendance', href: '/dashboard/attendance', icon: QrCode },
+          { name: 'QR Attendance', href: '/dashboard/qr-attendance', icon: QrCode },
           { name: 'Examinations', href: '/dashboard/exams', icon: ClipboardList },
           { name: 'Academics', href: '/dashboard/academics', icon: BookOpen },
           { name: 'Notices', href: '/dashboard/notices', icon: Bell },
@@ -62,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       case 'STUDENT':
         return [
           ...baseItems,
-          { name: 'QR Code', href: '/dashboard/qr-code', icon: QrCode },
+          { name: 'QR Attendance', href: '/dashboard/student-qr', icon: QrCode },
           { name: 'Academics', href: '/dashboard/academics', icon: BookOpen },
           { name: 'Fees', href: '/dashboard/fees', icon: CreditCard },
           { name: 'Library', href: '/dashboard/library', icon: BookOpen },

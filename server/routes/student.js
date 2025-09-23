@@ -32,17 +32,41 @@ router.get('/dashboard-stats', async (req, res) => {
       }
     });
 
-    // Mock data for other stats
-    const stats = {
-      attendancePercentage,
-      pendingAssignments: 5,
-      upcomingExams: 3,
-      pendingFees: pendingFees._sum.amount || 0,
-      borrowedBooks: 2,
-      notices: 8
-    };
+    // Get recent notices (limit 3)
+    const recentNotices = await prisma.notice.findMany({
+      where: {
+        isPublished: true,
+        OR: [
+          { targetAudience: 'ALL' },
+          { targetAudience: 'STUDENTS' },
+          { 
+            AND: [
+              { targetAudience: 'DEPARTMENT' },
+              { targetValue: req.user.department }
+            ]
+          }
+        ]
+      },
+      include: {
+        author: {
+          select: {
+            firstName: true,
+            lastName: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 3
+    });
 
-    res.json(stats);
+    res.json({
+      attendancePercentage,
+      pendingFees: pendingFees._sum.amount || 0,
+      recentNotices,
+      totalClasses: totalSessions,
+      presentClasses: presentCount
+    });
   } catch (error) {
     console.error('Student dashboard stats error:', error);
     res.status(500).json({ message: 'Failed to fetch dashboard stats' });
