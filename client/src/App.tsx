@@ -21,6 +21,8 @@ import AdmissionsManagement from './pages/dashboard/AdmissionsManagement';
 import NoticesManagement from './pages/dashboard/NoticesManagement';
 import Reports from './pages/dashboard/Reports';
 import FeesManagement from './pages/dashboard/FeesManagement';
+import Examinations from './pages/dashboard/Examinations';
+import HostelManagement from './pages/dashboard/HostelManagement';
 
 function App() {
   return (
@@ -49,6 +51,8 @@ function App() {
                 <Route path="notices" element={<NoticesManagement />} />
                 <Route path="reports" element={<Reports />} />
                 <Route path="fees" element={<FeesManagement />} />
+                <Route path="exams" element={<Examinations />} />
+                <Route path="hostel" element={<HostelManagement />} />
                 {/* Additional nested routes will be added here */}
               </Route>
             </Routes>

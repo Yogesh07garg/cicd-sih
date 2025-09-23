@@ -46,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           { name: 'Fees Management', href: '/dashboard/fees', icon: DollarSign },
           { name: 'Examinations', href: '/dashboard/exams', icon: ClipboardList },
           { name: 'Hostel Management', href: '/dashboard/hostel', icon: Building },
-          { name: 'AI Tools', href: '/dashboard/ai-tools', icon: Settings },
+          // { name: 'AI Tools', href: '/dashboard/ai-tools', icon: Settings },
         ];
       
       case 'FACULTY':

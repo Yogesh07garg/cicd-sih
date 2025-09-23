@@ -75,6 +75,15 @@ model User {
   paymentTransactions    PaymentTransaction[] @relation(name: "PaymentTransaction_student")
   feeAdjustmentsReceived FeeAdjustment[]      @relation(name: "FeeAdjustment_student")
   feeAdjustmentsApplied  FeeAdjustment[]      @relation(name: "FeeAdjustment_appliedBy")
+  Exam                   Exam[]
+  ExamSession            ExamSession[]
+  HallTicket             HallTicket[]
+  QuestionPaper          QuestionPaper[]
+  ExamAttendance         ExamAttendance[]
+  ExamResult             ExamResult[]
+  HostelComplaint        HostelComplaint[]
+  MaintenanceRequest     MaintenanceRequest[]
+  VisitorLog             VisitorLog[]
 
   @@map("users")
 }
@@ -245,8 +254,9 @@ model HostelRoom {
   block       HostelBlock        @relation(fields: [blockId], references: [id])
   allocations HostelAllocation[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  HostelComplaint HostelComplaint[]
 
   @@unique([blockId, roomNumber])
   @@map("hostel_rooms")
@@ -368,4 +378,168 @@ model FeeAdjustment {
   updatedAt DateTime @updatedAt
 
   @@map("fee_adjustments")
+}
+
+// Examination models
+model Exam {
+  id             String          @id @default(cuid())
+  title          String
+  type           String // MIDTERM, FINAL, PRACTICAL, INTERNAL
+  academicYear   String?
+  course         String?
+  createdById    String
+  createdBy      User            @relation(fields: [createdById], references: [id])
+  sessions       ExamSession[]
+  questionPapers QuestionPaper[]
+  results        ExamResult[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("exams")
+}
+
+model ExamSession {
+  id            String           @id @default(cuid())
+  examId        String
+  subject       String
+  venue         String
+  hallCapacity  Int?
+  date          DateTime
+  startTime     DateTime
+  endTime       DateTime?
+  invigilatorId String? // faculty id
+  invigilator   User?            @relation(fields: [invigilatorId], references: [id])
+  hallTickets   HallTicket[]
+  attendances   ExamAttendance[]
+
+  exam      Exam     @relation(fields: [examId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("exam_sessions")
+}
+
+model HallTicket {
+  id        String   @id @default(cuid())
+  sessionId String
+  studentId String
+  ticketRef String   @unique
+  issuedAt  DateTime @default(now())
+  approved  Boolean  @default(false)
+  pdfUrl    String? // optional server-side PDF path
+
+  session ExamSession @relation(fields: [sessionId], references: [id])
+  student User        @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
+  @@map("hall_tickets")
+}
+
+model QuestionPaper {
+  id           String    @id @default(cuid())
+  examId       String
+  uploadedById String
+  filename     String
+  storagePath  String
+  approved     Boolean   @default(false)
+  releaseAt    DateTime? // auto-unlock time
+  createdAt    DateTime  @default(now())
+
+  exam       Exam @relation(fields: [examId], references: [id])
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@map("question_papers")
+}
+
+model ExamAttendance {
+  id        String   @id @default(cuid())
+  sessionId String
+  studentId String
+  markedAt  DateTime @default(now())
+  method    String // MANUAL, QR, BIOMETRIC
+  status    String   @default("PRESENT") // PRESENT, ABSENT
+  notes     String?  @db.Text
+
+  session ExamSession @relation(fields: [sessionId], references: [id])
+  student User        @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
+  @@map("exam_attendances")
+}
+
+model ExamResult {
+  id          String    @id @default(cuid())
+  examId      String
+  studentId   String
+  totalMarks  Float?
+  grade       String?
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  exam    Exam @relation(fields: [examId], references: [id])
+  student User @relation(fields: [studentId], references: [id])
+
+  @@unique([examId, studentId])
+  @@map("exam_results")
+}
+
+// Hostel extensions (complaints, maintenance, visitor logs, fee structure)
+model HostelFeeStructure {
+  id           String   @id @default(cuid())
+  name         String
+  roomType     String // SINGLE, DOUBLE, TRIPLE
+  amount       Float
+  academicYear String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("hostel_fee_structures")
+}
+
+model HostelComplaint {
+  id          String    @id @default(cuid())
+  studentId   String
+  roomId      String?
+  description String    @db.Text
+  status      String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, REJECTED
+  assignedTo  String? // staff id
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  student            User?                @relation(fields: [studentId], references: [id])
+  room               HostelRoom?          @relation(fields: [roomId], references: [id])
+  MaintenanceRequest MaintenanceRequest[]
+
+  @@map("hostel_complaints")
+}
+
+model MaintenanceRequest {
+  id          String    @id @default(cuid())
+  complaintId String
+  staffId     String?
+  notes       String?   @db.Text
+  status      String    @default("PENDING") // PENDING, ASSIGNED, COMPLETED
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  complaint HostelComplaint @relation(fields: [complaintId], references: [id])
+  staff     User?           @relation(fields: [staffId], references: [id])
+
+  @@map("maintenance_requests")
+}
+
+model VisitorLog {
+  id          String    @id @default(cuid())
+  studentId   String
+  visitorName String
+  relation    String?
+  checkIn     DateTime  @default(now())
+  checkOut    DateTime?
+
+  student User @relation(fields: [studentId], references: [id])
+
+  @@map("visitor_logs")
 }

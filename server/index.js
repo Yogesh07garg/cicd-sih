@@ -14,6 +14,8 @@ import attendanceRoutes from './routes/attendance.js';
 import admissionsRoutes from './routes/admissions.js'; // Importing admissions routes
 import feesRoutes from './routes/fees.js'; // Importing fees routes
 import reportsRoutes from './routes/reports.js'; // Importing reports routes
+import examsRoutes from './routes/exams.js';
+import hostelRoutes from './routes/hostel.js';
 
 // Load environment variables
 dotenv.config();
@@ -47,6 +49,8 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/admissions', admissionsRoutes); // Registering admissions routes
 app.use('/api/fees', feesRoutes); // Registering fees routes
 app.use('/api/reports', reportsRoutes); // Registering reports routes
+app.use('/api/exams', examsRoutes);
+app.use('/api/hostel', hostelRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

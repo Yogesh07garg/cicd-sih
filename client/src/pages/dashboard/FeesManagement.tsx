@@ -3,7 +3,17 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const FeesManagement: React.FC = () => {
-  const [structures, setStructures] = useState<any[]>([]);
+  // Hardcoded fee structures (display-only)
+  const HARDCODED_STRUCTURES = [
+    { id: 'fs-exam', name: 'Examination Fee', description: 'Semester/term exam fee', amount: 500, academicYear: new Date().getFullYear().toString(), course: 'General' },
+    { id: 'fs-tuition', name: 'Tuition Fee (Year)', description: 'Annual tuition fee', amount: 50000, academicYear: new Date().getFullYear().toString(), course: 'All' },
+    { id: 'fs-hostel', name: 'Hostel Fee (Annual)', description: 'Hostel accommodation fee', amount: 30000, academicYear: new Date().getFullYear().toString(), course: 'Hostel' },
+    { id: 'fs-mess', name: 'Mess Fee (Monthly)', description: 'Monthly mess charges', amount: 3000, academicYear: new Date().getFullYear().toString(), course: 'Hostel' },
+    { id: 'fs-library', name: 'Library Fee', description: 'Library & resources fee', amount: 1000, academicYear: new Date().getFullYear().toString(), course: 'All' },
+    { id: 'fs-annual', name: 'Annual Development Fee', description: 'One-time annual development fee', amount: 2000, academicYear: new Date().getFullYear().toString(), course: 'All' }
+  ];
+
+  const [structures, setStructures] = useState<any[]>(HARDCODED_STRUCTURES);
   // Student lookup states
   const [studentQuery, setStudentQuery] = useState(''); // search by name / studentId / email
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null); // selected user object
@@ -72,7 +82,8 @@ const FeesManagement: React.FC = () => {
       const res = await axios.get('/api/fees/structures');
       // accept: direct array OR { data: [...] } OR { success: true, data: [...] } OR { data: { structures: [...] } }
       const arr = extractArray(res, ['data', 'data.structures', 'structures']);
-      setStructures(arr);
+      // use server results if present, otherwise show hardcoded list
+      setStructures((Array.isArray(arr) && arr.length > 0) ? arr : HARDCODED_STRUCTURES);
     } catch (err: any) {
       console.error('Fetch fee structures error', err);
       if (err.response?.status === 401) {
@@ -80,9 +91,10 @@ const FeesManagement: React.FC = () => {
       } else if (err.response?.status === 403) {
         toast.error('Not authorized to view fee structures');
       } else {
-        toast.error('Failed to load fee structures');
+        toast.error('Failed to load fee structures — showing defaults');
       }
-      setStructures([]);
+      // fallback to hardcoded structures when fetch fails
+      setStructures(HARDCODED_STRUCTURES);
     }
   };
 
@@ -126,7 +138,7 @@ const FeesManagement: React.FC = () => {
         amount: Number(txn.amount),
         method: txn.method,
         reference: txn.reference || undefined,
-        feeId: txn.feeId || undefined,
+        // removed feeId from payload (optional fee-item apply removed)
         feeCategory: txn.feeCategory || undefined
       };
       await axios.post('/api/fees/transactions', payload);
@@ -268,9 +280,10 @@ const FeesManagement: React.FC = () => {
         {/* Fee Structures */}
         <div className="bg-white p-4 rounded shadow">
           <h2 className="font-semibold mb-2">Fee Structures</h2>
+
           <ul className="space-y-2">
-            {(Array.isArray(structures) ? structures : []).map(s => (
-              <li key={s.id} className="flex justify-between text-sm">
+            {(Array.isArray(structures) ? structures : HARDCODED_STRUCTURES).slice(0, 6).map(s => (
+              <li key={s.id || s.name} className="flex justify-between text-sm">
                 <div>
                   <div className="font-medium">{s.name}</div>
                   <div className="text-xs text-gray-500">{s.course || s.academicYear}</div>
@@ -340,16 +353,6 @@ const FeesManagement: React.FC = () => {
                 <option value="LIBRARY">Library</option>
                 <option value="ANNUAL">Annual</option>
                 <option value="OTHER">Other</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm block">Apply to Fee Item (optional)</label>
-              <select value={txn.feeId} onChange={e => setTxn(s => ({ ...s, feeId: e.target.value }))} className="w-full p-2 border rounded">
-                <option value="">-- Select fee item or leave blank --</option>
-                {studentFees.map(f => (
-                  <option key={f.id} value={f.id}>{f.feeType} • ₹{f.amount - (f.paidAmount || 0)} • {f.status}</option>
-                ))}
               </select>
             </div>
 
@@ -497,3 +500,4 @@ const FeesManagement: React.FC = () => {
 };
 
 export default FeesManagement;
+                            
