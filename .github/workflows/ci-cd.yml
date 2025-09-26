@@ -55,16 +55,21 @@ jobs:
           docker build -t yogesh07garg/image-server:latest ./server
           docker push yogesh07garg/image-server:latest
 
-      # Step 8: Setup kubectl to deploy
+      # Step 8: Setup kubectl
       - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
 
-      # Step 9: Apply Kubernetes manifests
+      # Step 9: Decode kubeconfig
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      # Step 10: Apply Kubernetes manifests
       - name: Deploy to Kubernetes
-        env:
-          KUBECONFIG: ${{ secrets.KUBECONFIG_DATA }}
         run: |
           kubectl apply -f ./k8s
           kubectl rollout restart deployment client
