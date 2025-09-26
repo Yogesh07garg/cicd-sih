@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      containers:
+        - name: server
+          image: yogesh07garg/image-server:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: database-url
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: gemini-api-key
+            - name: JWT_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: jwt-access-secret
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: erp-secrets
+                  key: jwt-refresh-secret
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: erp-config
+                  key: port
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: erp-config
+                  key: node-env
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: erp-config
+                  key: frontend-url
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+spec:
+  ports:
+    - port: 5000
+  selector:
+    app: server
