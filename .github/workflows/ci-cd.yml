@@ -4,9 +4,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - '.github/**'
+      - 'k8s/**'
   pull_request:
     branches:
       - main
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - '.github/**'
+      - 'k8s/**'
 
 jobs:
   build-and-push:
